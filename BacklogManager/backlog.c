@@ -45,13 +45,14 @@ BacklogHousekeepingTypes LDRecordManager;
 //########## 1 x 4096 BUFFER for RECORD ACQUISITION AND WRITE TO SECTOR ###############
 //Write Buffer or ram copy of the first sector to be written
 //This stack is used to accumulate all data acquired,
-BacklogDataTypes ramStack_LD_WRecBuff[RECORDINSECTOR];
+BacklogDataTypes ramStack_LD_WRecBuff[DATARECORDINSECTOR];
 
+BacklogDataTypes tempRecordBuff[DATARECORDINSECTOR];
 //***************************************************************************************
 //########  6 x 4096 BUFFER FOR SOCKET RW CACHE ##################
 //This buffer array is used by each per socket Sector Ptr have a cache for sector write operation.
 //writing of this sector write cache is done when None of the SocketRWpointer point to it.
-SectorBuffTypes ramStackTxRWBuff[NO_OF_SOCKET];
+SectorDataBuffTypes ramStackTxRWBuff[NO_OF_SOCKET];
 //bytes = 4096*6 array of sector chunk-wise record copy
 //*****************************************************************************************
 //*****************************************************************************************
@@ -61,7 +62,12 @@ uint8_t searchUsedRWPtrBuff(uint16_t sectorNo);
 uint8_t checkUsed_RWPtrBuff(uint8_t buffIndx);//check anyone used this buffer, return no of buffer user
 uint8_t checkAllTxFlagCleared(uint8_t *flagArray);
 
-uint8_t writeSPIFlashSector(uint16_t* sectorPtr, BacklogHousekeepingTypes* manager, SectorBuffTypes* buff);
+uint8_t writeSPIFlashSector(uint16_t sectorNum, BacklogHousekeepingTypes* manager, BacklogDataTypes* buff);
+
+uint8_t EnterBadSector(BacklogHousekeepingTypes* manager,uint16_t sectorNum);
+uint8_t CheckBadsectorList(BacklogHousekeepingTypes* manager, uint16_t sectorNum);
+void IncrementSectorPtr(BacklogHousekeepingTypes* manager, uint16_t* sectorPtr);
+void DecrementSectorPtr(BacklogHousekeepingTypes* manager, uint16_t* sectorPtr);
 
 uint8_t searchTagRecordOnBuffer(uint8_t socketNumber, BacklogHousekeepingTypes* manager,BacklogDataTypes* rambuff,BacklogDataTypes* recordfound,uint8_t* recordindx);
 
@@ -99,12 +105,13 @@ void txsuccessCallback_Socket(uint8_t socketNo, uint8_t updatedTxStatus)
 				if(checkUsed_RWPtrBuff(LDRecordManager.Socket_RWptr[socketNo].BufferIndex)==0)
 				{	//all clear, record finish on this sector copy, no other socket ptr use the buffer
 					//#####write data to flash for this case **********************#########
-					if(ERROR == writeSPIFlashSector(&LDRecordManager.Socket_RWptr[socketNo].SectorPtr, &LDRecordManager, &LDRecordManager.Socket_RWptr[socketNo].buffer))
-					{
+
+					if(ERROR == writeSPIFlashSector(LDRecordManager.Socket_RWptr[socketNo].SectorPtr, &LDRecordManager, LDRecordManager.Socket_RWptr[socketNo].buffer))
+					{	//write FAIL,
 						_Error_Handler(__FILE__, __LINE__);
 					}
 					//retn=spiflashHandler->erase(spiflashHandler,LDRecordManager.Socket_RWptr[socketNo].SectorPtr,4096);
-					//retn=spiflashHandler->write(spiflashHandler,LDRecordManager.Socket_RWptr[socketNo].SectorPtr,sizeof(SectorBuffTypes),LDRecordManager.Socket_RWptr[socketNo].buffer);
+					//retn=spiflashHandler->write(spiflashHandler,LDRecordManager.Socket_RWptr[socketNo].SectorPtr,sizeof(SectorDataBuffTypes),LDRecordManager.Socket_RWptr[socketNo].buffer);
 				}
 				LDRecordManager.Socket_RWptr[socketNo].BufferIndex=0; //clear buffer by reseting buffer index
 				LDRecordManager.Socket_RWptr[socketNo].buffer =ramStack_LD_WRecBuff;//point to buffer_index=0, idle pointing buffer
@@ -144,10 +151,16 @@ uint8_t checkAllTxFlagCleared(uint8_t *flagArray)
 }
 uint8_t enterRecForSocket(uint8_t socketNo,BacklogDataTypes* recorddata )
 {
+	uint16_t maxbadsector=FLASH_MAXBADSECTOR;// On failure of Sector write it move to next automatically till max sector bad cnt
+
 	//rearrange uncompleted TxTag in the ramstackbuff if some TxTag in stackbbuffer has been all cleared by some record
 
-	//increment the record pointer
+	//increment the record pointer and other record counter
 	LDRecordManager.ramWstackIndex++;
+
+	LDRecordManager.RecordWriteCnt++;//increment total count
+	LDRecordManager.RecordCntSocket[socketNo]++; //for specific socket
+	LDRecordManager.Socket_RWptr[socketNo].InterRecordGenerateCnt++;
 
 	if(LDRecordManager.ramWstackIndex < LDRecordManager.NoOfRecordinSector)
 	{ 	//ramstack has room for new record
@@ -157,6 +170,68 @@ uint8_t enterRecForSocket(uint8_t socketNo,BacklogDataTypes* recorddata )
 	}
 	else//ramstack is FULL, we have to write/override sector on SPI Flash
 	{
+		//############### Check some socket using the buffer and wait for transmit complete
+
+
+		//###########################
+
+		//write sector on HeadPtr
+		//write data to flash for this case **********************#########
+		if(LDRecordManager.SectorHeadPtr == LDRecordManager.SectorTailPtr)
+		{
+			if(LDRecordManager.RecordWriteCnt== LDRecordManager.NoOfRecordinSector)
+			{	//record empty and then even of first write sector
+				//increment both the sector to avoid multiple write to same sector on fluctuating connectivity (wear leveling 1)
+				IncrementSectorPtr(&LDRecordManager,&LDRecordManager.SectorHeadPtr);
+				IncrementSectorPtr(&LDRecordManager,&LDRecordManager.SectorTailPtr);
+			}
+		}
+		maxbadsector=FLASH_MAXBADSECTOR;
+		while(maxbadsector !=0)
+		{
+			//proceed if it is not a bad sector
+			if(NOTFOUND == CheckBadsectorList(&LDRecordManager, LDRecordManager.SectorHeadPtr))
+			{
+				if(ERROR == writeSPIFlashSector(LDRecordManager.SectorHeadPtr, &LDRecordManager, ramStack_LD_WRecBuff))
+				{	//write FAIL, enter into record bad sector list
+					if(ERROR==EnterBadSector(&LDRecordManager,LDRecordManager.SectorHeadPtr))
+					{    //bad sector trace list is full
+						_Error_Handler(__FILE__, __LINE__);
+					}
+				}
+				else
+				{  	//####******* Write successfully, clear buffer and enter record
+					//Enter the data by copying record on buffer
+					LDRecordManager.ramWstackIndex=0;
+					memcpy(&ramStack_LD_WRecBuff[LDRecordManager.ramWstackIndex], &recorddata, sizeof(BacklogDataTypes));
+
+					IncrementSectorPtr(&LDRecordManager,&LDRecordManager.SectorHeadPtr);//increment Headptr note to pass reference of Ptr
+
+					if(LDRecordManager.SectorHeadPtr == LDRecordManager.SectorTailPtr)
+					{
+						//record is FULL, start overwriting
+						IncrementSectorPtr(&LDRecordManager,&LDRecordManager.SectorTailPtr);
+					}
+					break;
+				}
+
+			}
+			IncrementSectorPtr(&LDRecordManager,&LDRecordManager.SectorHeadPtr);
+			maxbadsector--;//decrement for next try on other sector
+		}
+		if(maxbadsector==0)//too many bad sector exit program
+		{    //bad sector trace list is full
+			_Error_Handler(__FILE__, __LINE__);//EXCEPTION CATCH
+		}
+
+
+
+
+		if(ERROR == writeSPIFlashSector(LDRecordManager.SectorHeadPtr, &LDRecordManager, ramStack_LD_WRecBuff))
+		{
+			_Error_Handler(__FILE__, __LINE__);
+		}
+
 		if(LDRecordManager.SectorHeadPtr == LDRecordManager.SectorTailPtr)
 		{	//First entry on record empty, or all sector are Full
 			LDRecordManager.MaxNoRecord = ((((LDRecordManager.SectorLast-LDRecordManager.SectorStart)+1) - LDRecordManager.BadsectorCnt) * LDRecordManager.NoOfRecordinSector);
@@ -167,12 +242,7 @@ uint8_t enterRecForSocket(uint8_t socketNo,BacklogDataTypes* recorddata )
 				LDRecordManager.SectorTailPtr++;
 				if(LDRecordManager.SectorTailPtr > LDRecordManager.SectorLast)//boundary
 					LDRecordManager.SectorTailPtr=LDRecordManager.SectorStart;
-				//write sector on HeadPtr
-				//write data to flash for this case **********************#########
-				if(ERROR == writeSPIFlashSector(&LDRecordManager.SectorHeadPtr, &LDRecordManager, ramStack_LD_WRecBuff))
-				{
-					_Error_Handler(__FILE__, __LINE__);
-				}
+
 			}
 
 		}
@@ -258,7 +328,7 @@ uint8_t getRecForSocket(uint8_t socketNo,BacklogDataTypes* recorddata )
 					}
 
 					//read sector
-					uint8_t k=RECORDINSECTOR;//0-44 (for a case of 45 record per sector)
+					uint8_t k=DATARECORDINSECTOR;//0-44 (for a case of 45 record per sector)
 					while(k!=0)
 					{	k=k-1;//move from latest record within a sector i.e from last
 						//************* Read Flash **********************#########
@@ -296,7 +366,7 @@ uint8_t getRecForSocket(uint8_t socketNo,BacklogDataTypes* recorddata )
 										LDRecordManager.Socket_RWptr[socketNo].BufferIndex=bufindx;//1-6 mapp on buff[0] to buff[5]
 										//Copy sector record to buffer pointed by Socket1 RW Ptr
 										//read flash **********************#########
-										retn=spiflashHandler->read(spiflashHandler, (i*LDRecordManager.SectorSizeBytes), sizeof(SectorBuffTypes),ramStackTxRWBuff[bufindx-1].ramStackBuff);
+										retn=spiflashHandler->read(spiflashHandler, (i*LDRecordManager.SectorSizeBytes), sizeof(SectorDataBuffTypes),ramStackTxRWBuff[bufindx-1].ramStackBuff);
 									}
 									else
 										_Error_Handler(__FILE__, __LINE__);
@@ -434,40 +504,69 @@ uint8_t searchTagRecordOnBuffer(uint8_t socketNumber, BacklogHousekeepingTypes* 
 	return NOTFOUND;
 }
 
-uint8_t writeSPIFlashSector(uint16_t* sectorPtr, BacklogHousekeepingTypes* manager, SectorBuffTypes* buff)
+uint8_t writeSPIFlashSector(uint16_t sectorNum, BacklogHousekeepingTypes* manager, BacklogDataTypes* buff)
 {
+
 	uint8_t retrycnt=FLASHWRITE_RETRY; //Handle multiple retry of Sector Write
-	uint16_t maxbad=FLASH_MAXBADSECTOR;// On failure of Sector write it move to next automatically till max sector bad cnt
 	uint16_t retn=0;
-	while(maxbad !=0)
+	uint32_t addrs= sectorNum*manager->SectorSizeBytes;
+
+	retrycnt=FLASHWRITE_RETRY;
+	while(retrycnt!=0)//try multiple write if not successful
 	{
-		retrycnt=FLASHWRITE_RETRY;
-		while(retrycnt!=0)//try multiple write if not successful
+		retn=0;
+		retn=spiflashHandler->erase(spiflashHandler,addrs,4096);
+		retn|=spiflashHandler->write(spiflashHandler,addrs,sizeof(SectorDataBuffTypes),buff);
+		retn|=spiflashHandler->read(spiflashHandler, addrs,sizeof(SectorDataBuffTypes),tempRecordBuff);
+		if(retn==0 && memcmp(buff,tempRecordBuff,sizeof(SectorDataBuffTypes))==0)
 		{
-			retn=0;
-			retn=spiflashHandler->erase(spiflashHandler,*sectorPtr,4096);
-			retn|=spiflashHandler->write(spiflashHandler,*sectorPtr,sizeof(SectorBuffTypes),buff);
-			if(retn==0)
-			{
-				return SUCCESS;
-			}
-			retrycnt--;//decrement for next try
+			return SUCCESS;
 		}
-		//record bad sector
-		manager->Badsectorbuff[manager->BadsectorCnt]=manager->SectorHeadPtr;
-		manager->BadsectorCnt++;
-
-		*sectorPtr=*sectorPtr+1; //go ahead to try write on Next sector
-		if(*sectorPtr == manager->SectorLast)
-		{
-			*sectorPtr=manager->SectorStart;
-		}
-
-		maxbad--;//decrement for next try on other sector
+		retrycnt--;//decrement for next try if not success
 	}
-
-	return ERROR;
+	return ERROR;//write fail on a sector
 }
+uint8_t EnterBadSector(BacklogHousekeepingTypes* manager,uint16_t sectorNum)
+{
+	//record bad sector
+
+	manager->Badsectorbuff[manager->BadsectorCnt]=sectorNum;
+	manager->BadsectorCnt++;
+	if(manager->BadsectorCnt > FLASH_MAXBADSECTORBUFF)
+		return ERROR;
+	else
+		return SUCCESS;
+}
+uint8_t CheckBadsectorList(BacklogHousekeepingTypes* manager, uint16_t sectorNum)
+{
+	//check if badsector if so skip
+
+	for(int q=0;q<manager->BadsectorCnt;q++)
+	{
+		if(sectorNum == manager->Badsectorbuff[q])
+		{
+			return FOUND;
+		}
+	}
+	return NOTFOUND;
+}
+void IncrementSectorPtr(BacklogHousekeepingTypes* manager, uint16_t* sectorPtr)
+{
+	*sectorPtr=*sectorPtr+1; //go ahead to try write on Next sector
+	if(*sectorPtr > manager->SectorLast)
+	{
+		*sectorPtr=manager->SectorStart;
+	}
+}
+void DecrementSectorPtr(BacklogHousekeepingTypes* manager, uint16_t* sectorPtr)
+{
+	*sectorPtr=*sectorPtr-1; //go ahead to try write on Next sector
+	if(*sectorPtr < manager->SectorStart)
+	{
+		*sectorPtr=manager->SectorLast;
+	}
+}
+
 
 //##########################################
 

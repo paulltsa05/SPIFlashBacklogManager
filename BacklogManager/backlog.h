@@ -10,30 +10,41 @@
 #include <spi_flash.h>
 #include <stdbool.h>
 
+#define NO_OF_SOCKET		6 //bytes = 4096*6 array of sector chunk-wise record copy
 
 #define FSECTORSIZE					4096
 #define FTOTALSECTOR				1024
 #define FLASHWRITE_RETRY			5
 #define FLASH_MAXBADSECTOR			150
-#define DATARECORD_STARTSECTOR		122
-#define DATARECORDMANAGE_SECTOR1	122
-#define DATARECORDMANAGE_SECTOR2	123
-#define DATARECORDSTART_SECTOR		124
-#define DATARECORDEND_SECTOR		1023
+#define FLASH_MAXBADSECTORBUFF		256
+
+#define RECORDMANAGE_SECTOR1		62
+#define RECORDMANAGE_SECTOR2		63 		//MANAGE: 2 sectors store management data twice
+
+#define TXTAGRECORDSTART_SECTOR		64
+#define TXTAGRECORDEND_SECTOR		127		//TXTAG:  64 sectors
+
+#define DATARECORDSTART_SECTOR		128
+#define DATARECORDEND_SECTOR		1023	//DATA :  896 sectors
 
 #define DATARECORDSIZE				91 //one record size in bytes
-#define RECORDINSECTOR				45 //  4096/91=45
+#define DATARECORDINSECTOR			45 //  4096/91=45
+
+#define TXTAGRECORDSIZE				NO_OF_SOCKET //one record size in bytes
+#define TXTAGRECORDINSECTOR			682 //4096/(MAX NO_OF_SOCKET=6 SUPPORTED)
+
 #define TOTALRECORD					40000
 
 #define NULL0			0
 //return types
 #define SUCCESS			0
+#define FOUND			0
 #define EMPTY			1
 #define NOTFOUND		2
 
 #define ERROR			255
 
-#define NO_OF_SOCKET		6 //bytes = 4096*6 array of sector chunk-wise record copy
+
 
 #define SOCKET1				0
 #define SOCKET2				1
@@ -76,51 +87,55 @@ typedef struct //6  ,, 8x6 =48 (6 bytes)
 
 typedef union
 {
-	uint8_t AllFlag[NO_OF_SOCKET];//
-	SocketType FlagField;
+	uint8_t AllFlag[NO_OF_SOCKET];	//
+	SocketType FlagField;			//
 }TxTagTypes;
 
 
 //Storage Backlog record types
 typedef struct {
-	TxTagTypes TxTag; // 6 bytes
-	uint8_t GPSFix;//	1
-	uint32_t Latitude;//	4
-	uint32_t Longitude;//	4
-	uint32_t GPSDate;//	4
-	uint32_t GPSTime;//	4
-	uint16_t Speed;//	2
-	uint16_t Heading;//	2
-	uint32_t Altitude;//	4
-	uint8_t NoOfSatellites;//No. of Satellites;//	1
-	uint16_t HorDilPrecision;//Horizontal dilution of precision;//	2
-	uint16_t PosDilPrecision;//Positional dilution of precision;//	2
-	uint16_t MainVoltage_raw;//Main Input Voltage;//	2
-	uint16_t IntBatteryVoltage;//Internal Battery Voltage;//	2
-	uint8_t gsmSignalStrength;//GSM Signal Strength;//	1
-	uint16_t MCC;//	2
-	uint16_t MNC;//	2
-	uint16_t LAC;//	2
-	uint16_t CellID;//	2
-	uint32_t NMR[4];//	24
-	uint16_t DigitalStatus1;//IGN/PWR/EMG/TA/BD; //2
-	uint8_t DigitalInput;//Digital I/p 4	1
-	uint8_t DigitalOutput; //Digital o/p 2
-	uint16_t PrevDistanceEMR;//Distance calculated from prev. GPS	2
-	uint16_t AnalogIN1;//Analog I/p 2	4
+	TxTagTypes TxTag; 			//  6 bytes
+	uint8_t GPSFix;				//	1
+	uint32_t Latitude;			//	4
+	uint32_t Longitude;			//	4
+	uint32_t GPSDate;			//	4
+	uint32_t GPSTime;			//	4
+	uint16_t Speed;				//	2
+	uint16_t Heading;			//	2
+	uint32_t Altitude;			//	4
+	uint8_t NoOfSatellites;		//No. of Satellites;//	1
+	uint16_t HorDilPrecision;	//Horizontal dilution of precision;//	2
+	uint16_t PosDilPrecision;	//Positional dilution of precision;//	2
+	uint16_t MainVoltage_raw;	//Main Input Voltage;//	2
+	uint16_t IntBatteryVoltage;	//Internal Battery Voltage;//	2
+	uint8_t gsmSignalStrength;	//GSM Signal Strength;//	1
+	uint16_t MCC;				//	2
+	uint16_t MNC;				//	2
+	uint16_t LAC;				//	2
+	uint16_t CellID;			//	2
+	uint32_t NMR[4];			//	24
+	uint16_t DigitalStatus1;	//IGN/PWR/EMG/TA/BD; //2
+	uint8_t DigitalInput;		//Digital I/p 4	1
+	uint8_t DigitalOutput; 		//Digital o/p 2
+	uint16_t PrevDistanceEMR;	//Distance calculated from prev. GPS	2
+	uint16_t AnalogIN1;			//Analog I/p 2	4
 	uint16_t AnalogIN2;
-	uint8_t BatteryPercent;//	1
-	uint8_t MemoryPercentage;//	1
-	uint16_t Checksum;//	2
+	uint8_t BatteryPercent;		//	1
+	uint8_t MemoryPercentage;	//	1
+	uint16_t Checksum;			//	2
 
 
 }BacklogDataTypes;
 
+typedef struct {
+	TxTagTypes TxTag[TXTAGRECORDINSECTOR];; 			//  6 bytes
+}SectorTxTagBuffTypes;
+
 typedef struct // To store multiple copy of sector in RAM to handle multiple socket read write operation
 {
-	BacklogDataTypes ramStackBuff[RECORDINSECTOR];
+	BacklogDataTypes ramStackBuff[DATARECORDINSECTOR];
 
-}SectorBuffTypes;
+}SectorDataBuffTypes;
 
 typedef struct
 {
@@ -155,7 +170,7 @@ typedef struct
 	VirtualAddressType Socket_RWptr[NO_OF_SOCKET]; //pointer for socket1 read
 	uint8_t TxRWBuffCnt;//it keeps track of how many buffer is used by multiple Socket_RWPtr
 	uint16_t BadsectorCnt; // track No of Badsector within a fixed Section of sectors
-	uint16_t Badsectorbuff[256]; //sector Number
+	uint16_t Badsectorbuff[FLASH_MAXBADSECTORBUFF]; //sector Number
 }BacklogHousekeepingTypes;
 
 
