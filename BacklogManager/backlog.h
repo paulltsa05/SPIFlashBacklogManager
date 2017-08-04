@@ -15,17 +15,21 @@
 #define FSECTORSIZE					4096
 #define FTOTALSECTOR				1024
 #define FLASHWRITE_RETRY			5
-#define FLASH_MAXBADSECTOR			150
-#define FLASH_MAXBADSECTORBUFF		256
+
+#define DATAFLASH_MAXBADSECTOR		200 // quarter(200/889) bad sector will stop device operation for backlog storage
+#define TXTAGFLASH_MAXBADSECTOR		7   // 7 bad sector on TxTag section of Flash will stop device operation for backlog storage
+
+#define FLASH_MAXBADDATASECTORBUFF	256
+#define FLASH_MAXBADTXTAGSECTORBUFF	16
 
 #define RECORDMANAGE_SECTOR1		62
 #define RECORDMANAGE_SECTOR2		63 		//MANAGE: 2 sectors store management data twice
 
 #define TXTAGRECORDSTART_SECTOR		64
-#define TXTAGRECORDEND_SECTOR		127		//TXTAG:  64 sectors
+#define TXTAGRECORDEND_SECTOR		134		//TXTAG:  71 sectors, extra 7 sector included to map bad sector limit
 
-#define DATARECORDSTART_SECTOR		128
-#define DATARECORDEND_SECTOR		1023	//DATA :  896 sectors
+#define DATARECORDSTART_SECTOR		135
+#define DATARECORDEND_SECTOR		1023	//DATA :  889 sectors, can accomodate 45 (91byteDatarecord) in a sector = 40005 data record
 
 #define DATARECORDSIZE				91 //one record size in bytes
 #define DATARECORDINSECTOR			45 //  4096/91=45
@@ -94,7 +98,7 @@ typedef union
 
 //Storage Backlog record types
 typedef struct {
-	TxTagTypes TxTag; 			//  6 bytes
+	//TxTagTypes TxTag; 			//  6 bytes
 	uint8_t GPSFix;				//	1
 	uint32_t Latitude;			//	4
 	uint32_t Longitude;			//	4
@@ -127,25 +131,32 @@ typedef struct {
 
 }BacklogDataTypes;
 
-typedef struct {
-	TxTagTypes TxTag[TXTAGRECORDINSECTOR];; 			//  6 bytes
-}SectorTxTagBuffTypes;
 
 typedef struct // To store multiple copy of sector in RAM to handle multiple socket read write operation
 {
-	BacklogDataTypes ramStackBuff[DATARECORDINSECTOR];
+	TxTagTypes TxTagBuff[TXTAGRECORDINSECTOR];
 
-}SectorDataBuffTypes;
+}TxTagSectorBuffTypes;
+
+typedef struct // To store multiple copy of sector in RAM to handle multiple socket read write operation
+{
+	BacklogDataTypes DataBuff[DATARECORDINSECTOR];
+
+}DataSectorBuffTypes;
 
 typedef struct
 {
-	uint16_t SectorPtr; //denote sector no of SPI Flash
-	uint8_t RecordIndex; // current record index in the buffer
+	uint16_t DataSectorPtr; //denote sector no of SPI Flash
+	uint8_t DataRecordIndex; // current record index in the buffer
+
+	uint16_t TxTagSectorPtr;
+	uint16_t OldTxTagSectorPtr;//record previous TxTag to quickly jump back incase of multiple intermediate record generated
+	uint8_t TxTagRecordIndex;
 	uint8_t InterRecordGenerateCnt;//track no of data generated between record read, before whole read of backlog
 	uint8_t InterRecordSendRecIndx;//track Send recordindex pointer use by tx complete to know which flag to clear
 	uint8_t InterRecordSendFlg; //used by tx complete to reset the flag
-	uint8_t BufferIndex; //ramstack index follows: 0-WRecBuff,1-TxRWBuff1,2-TxRWBuff2, 3-TxRWBuff3, 4-TxRWBuff4,5-TxRWBuff5,6-TxRWBuff6
-	BacklogDataTypes* buffer; //dynamically point to ram record buffer depend on
+	uint8_t TxTagBufferIndex; //ramstack index follows: 0-WRecBuff,1-TxRWBuff1,2-TxRWBuff2, 3-TxRWBuff3, 4-TxRWBuff4,5-TxRWBuff5,6-TxRWBuff6
+	TxTagTypes* TxTagbuffer; //dynamically point to ram record buffer depend on
 
 }VirtualAddressType;
 
@@ -153,24 +164,41 @@ typedef struct
 {
 	uint32_t mtag;//0xA5A5A5A5 to flag SPI Flash is formatted for Backlog storage, set once and write during format operation
 	uint32_t checksum; //storage checksum of this meta/houskeeping data structure
-	uint16_t ramWstackIndex; //always point or index on ramstack_WRecBuff[] not required virtual address
-	uint16_t RecordSizeBytes;
 	uint32_t SectorSizeBytes;
-	uint16_t SectorHeadPtr;
-	uint16_t SectorTailPtr;
-	uint16_t SectorStart ;
-	uint16_t SectorLast ;
-	uint16_t SectorUsed;
-	uint16_t TotalSector;
-	uint16_t NoOfRecordinSector;
+	uint32_t TotalSectorInFlash;
+	uint16_t DataRecordSizeBytes;
+	uint16_t TxTagRecordSizeBytes;
+
+	uint16_t DataEntrystackIndex; //always point or index on ramstack_WRecBuff[] not required virtual address
+	uint16_t TxTagEntrystackIndex;
+
+	uint16_t DataSectorHeadPtr;
+	uint16_t DataSectorTailPtr;
+	uint16_t TxTagSectorHeadPtr;
+	uint16_t TxTagSectorTailPtr;
+
+	uint16_t DataSectorStart ;
+	uint16_t DataSectorLast ;
+	uint16_t TxTagSectorStart ;
+	uint16_t TxTagSectorLast ;
+
+	uint16_t DataSectorUsed;   // track sector use in Data Section increment n srite only
+	uint16_t TxTagSectorUsed;  // track sector use in TxTag Section
+
+	uint16_t NoOfDataRecordinSector;
+	uint16_t NoOfTxTagRecordinSector;
 	uint32_t MaxNoRecord;
-	uint32_t RecordWriteCnt;//track number of record ENTERED in a record section
+	uint32_t RecordNumber;
+	uint16_t RecordFull;
+	uint32_t RecordWriteCnt;//track number of record ENTERED in a record section independent of socket
 	//uint8_t	recordEntryCycleCnt[NO_OF_SOCKET]; //count no of generated data for the socket in-between record read
-	uint32_t RecordCntSocket[NO_OF_SOCKET]; //No of current record pending to be transmitted on each socket, per record theie can be multiple package made
+	uint32_t RecordRemaining[NO_OF_SOCKET]; //No of current record pending to be transmitted on each socket, per record theie can be multiple package made
 	VirtualAddressType Socket_RWptr[NO_OF_SOCKET]; //pointer for socket1 read
-	uint8_t TxRWBuffCnt;//it keeps track of how many buffer is used by multiple Socket_RWPtr
-	uint16_t BadsectorCnt; // track No of Badsector within a fixed Section of sectors
-	uint16_t Badsectorbuff[FLASH_MAXBADSECTORBUFF]; //sector Number
+	uint8_t TxTagBuffCnt;//it keeps track of how many buffer is used by multiple Socket_RWPtr
+	uint16_t DataBadsectorCnt; // track No of Badsector within a fixed Section of sectors
+	uint16_t DataBadsectorbuff[FLASH_MAXBADDATASECTORBUFF]; //sector Number
+	uint16_t TxTagBadsectorCnt; // track No of Badsector within a fixed Section of sectors
+	uint16_t TxTagBadsectorbuff[FLASH_MAXBADTXTAGSECTORBUFF]; //sector Number
 }BacklogHousekeepingTypes;
 
 
