@@ -30,7 +30,8 @@ Src/main.o: ../Src/main.c \
  D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_spi_ex.h \
  D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_uart.h \
  D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_uart_ex.h \
- D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Drivers/SPIFlashDriver/spi_flash.h
+ D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Drivers/SPIFlashDriver/spi_flash.h \
+ D:/BackUp/KVTS/MemoryManagementVTS/MemManage/BacklogManager/backlog_if.h
 
 D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Inc/main.h:
 
@@ -95,3 +96,5 @@ D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Drivers/STM32L4xx_HAL_Driver/Inc/st
 D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_uart_ex.h:
 
 D:/BackUp/KVTS/MemoryManagementVTS/MemManage/Drivers/SPIFlashDriver/spi_flash.h:
+
+D:/BackUp/KVTS/MemoryManagementVTS/MemManage/BacklogManager/backlog_if.h:

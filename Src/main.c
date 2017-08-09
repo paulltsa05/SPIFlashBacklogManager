@@ -43,6 +43,8 @@
 #include <stdarg.h>//for serial debug
 #include <stdint.h>
 #include <spi_flash.h>
+
+#include <backlog_if.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -52,7 +54,7 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-struct spi_flash *spiflashtest;
+
 
 /* USER CODE END PV */
 
@@ -74,13 +76,15 @@ static char buff[BUFSIZE+16];//for serial debug
 /* USER CODE BEGIN 0 */
 uint8_t SectorBuffwrite[4096];
 uint8_t SectorBuffread[4096];
+
+BacklogDataTypes Data;
 /* USER CODE END 0 */
 
 int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	int p;
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
@@ -105,45 +109,20 @@ int main(void)
   MX_USART2_UART_Init();
 
   /* USER CODE BEGIN 2 */
-  spiflashtest->spi =spi_setup_slave();
+  initRecordManager();
 
-  spiflashtest =spi_flash_probe();
-  uint16_t g=0;
-  for(g=0;g<4096;g++)
-  {
-	  SectorBuffwrite[g]=g;
-  }
-
-	PRINTF("Reading on 0 sector of length 4096 sector \n\r");
-	ret=spiflashtest->read(spiflashtest, 0, 4096, SectorBuffread);
-
-
-	  ret=spiflashtest->erase(spiflashtest,0,4096);
-
-	  ret=spiflashtest->read(spiflashtest, 89, 10, SectorBuffread);
-	  for(int i=0;i<10;i++)
-	  {
-	  		  PRINTF("Read data just after Erase %d \n\r",SectorBuffread[i]);
-	  }
-	  ret=spiflashtest->write(spiflashtest, 0, 4096, SectorBuffwrite);
-
-	  for(int i=0;i<4096;i++)
-	  {
-		  SectorBuffread[i]=0;
-	  }
-
-	  ret=spiflashtest->read(spiflashtest, 89, 10, SectorBuffread);
-	  for(int i=0;i<10;i++)
-	  {
-		  PRINTF("Read data %d \n\r",SectorBuffread[i]);
-	  }
-
-	  PRINTF("Erasing sector and write on %u sector of length %d sector \n\r",0,4096);
+	PRINTF("Flash initialize Done* \n\r");
 
   /* USER CODE END 2 */
-
+	for(p=0;p<1500;p++)
+	{
+		EnterRecord(ALTRecord,&Data);
+	    if(p%2==0)
+	    	ReadRecord(ALTRecord,&Data);
+	}
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
   /* USER CODE END WHILE */
