@@ -114,18 +114,22 @@ int main(void)
 	PRINTF("Flash initialize Done* \n\r");
 
   /* USER CODE END 2 */
-	for(p=0;p<150;p++)
+	for(p=0;p<579;p++)
 	{
-		EnterRecord(ALTRecord,&Data);
-	    //if(p%2==0)
-	    //	ReadRecord(ALTRecord,&Data);
+		if(ERROR==EnterRecord(ALTRecord,&Data))
+			p--;
+//	    if(p%3==0)
+//	    	ReadRecord(ALTRecord,&Data);
 	}
-	for(p=0;p<150;p++)
-	{
-		//EnterRecord(ALTRecord,&Data);
-	    //if(p%2==0)
-	    	ReadRecord(ALTRecord,&Data);
-	}
+	debug_DisplaySectorTable(ALTRecord);
+//	for(p=0;p<(488);p++)
+//	{
+//		//EnterRecord(ALTRecord,&Data);
+//	    //if(p%2==0)
+//	    	ReadRecord(ALTRecord,&Data);
+//	}
+//
+//	debug_DisplaySectorTable(ALTRecord);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 

@@ -33,6 +33,7 @@ enum RecordTypes{RecordMANAGER,EMGRecord,ALTRecord,LDRecord};
 typedef struct {
 	//TxTagTypes TxTag; 			//  6 bytes
 	uint32_t recordNum;         // 1 to MaxRecordNo
+	uint8_t alerttype;
 	uint8_t GPSFix;				//	1
 	uint32_t Latitude;			//	4
 	uint32_t Longitude;			//	4
@@ -73,5 +74,13 @@ extern uint8_t EnterRecord(enum RecordTypes storeType, void *buff);
 
 extern uint8_t ReadRecord(enum RecordTypes storeType, void *buff);
 
+//utility function
+extern uint16_t getTotalRecordSpace(enum RecordTypes storeType);
+extern uint16_t getStoredNoOfRecord(enum RecordTypes storeType);
+extern uint16_t getRemainingRecordSpace(enum RecordTypes storeType);
+
+
+
+extern void debug_DisplaySectorTable(enum RecordTypes storeType);
 
 #endif /* BACKLOG_IF_H_ */

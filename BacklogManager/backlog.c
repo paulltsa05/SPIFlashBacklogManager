@@ -97,6 +97,11 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 	{
 		if(DBManager.StoredRecordCnt ==0)
 		{
+#ifdef DEBUG_BACKLOG
+			PRINTF("RECORD EMPTY\n\r");
+#endif
+			if(DBManager.LatestAvailabilityNumber[storeType]>0)
+				DBManager.LatestAvailabilityNumber[storeType]=0;
 			FlashAccessInterlock=0;
 			return EMPTY;
 		}
@@ -104,9 +109,9 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 		{
 			//read directly from Flash sector on where ReadSectorTablePtr Points
 
-			if(SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex==0)
+			if(SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex==0)
 			{ //search from flash else continue with readindex
-
+				SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].AvailabilityNumber=0;//reset Availability for that sector table, move to next
 				//decrement the sector pointer first
 				DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 				tempsectorcnt=0;
@@ -114,38 +119,48 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 				{
 					tempsectorcnt++;
 
-					if(SectorTable[DBManager.ReadSectorTablePtr[storeType]].AvailabilityNumber < 0)//if it is bad sector skip
+					if(SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].AvailabilityNumber <= 0)//if it is bad sector skip
 					{
 						//move back
 						DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 						tempsectorcnt++;
 					}
 
-					if(SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex!=0) //data not empty
+					if(SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex!=0) //data not empty
 							break;
 
 					//move back decrement
 					DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 				}
 
-				if((tempsectorcnt == DBManager.SectorSize[storeType])&&(SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex==0))
+				if((tempsectorcnt == DBManager.SectorSize[storeType])&&(SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex==0))
 				{	//all record send condition from flash
+#ifdef DEBUG_BACKLOG
+					PRINTF("RECORD EMPTY HAS WRITEN ALL FROM FLASH\n\r");
+#endif
+					if(DBManager.LatestAvailabilityNumber[storeType]>0)//avoid to reset badsector tag
+						DBManager.LatestAvailabilityNumber[storeType]=0;
 					FlashAccessInterlock=0;
 					return EMPTY;
 				}
-				DBManager.LatestAvailabilityNumber[storeType]--;
-				SectorTable[DBManager.ReadSectorTablePtr[storeType]].AvailabilityNumber--;
-				SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex--;
+
+				if(DBManager.LatestAvailabilityNumber[storeType]>0)
+					DBManager.LatestAvailabilityNumber[storeType]--;
+				if(SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].AvailabilityNumber >0)
+					SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].AvailabilityNumber--;
+				if(SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex >0)
+					SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex--;
 
 			}
 			else
-			{
-				SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex--;
+			{   //just decrement and move on to read
+				if(SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex >0)
+					SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex--;
 			}
 
 
 			readaddress=( DBManager.ReadSectorTablePtr[storeType] *DBManager.FlashSectorSize); //get based address
-			readaddress= readaddress + (SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex * RECORDSIZEBYTES );
+			readaddress= readaddress + (SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex * DBManager.RecordSizeInBytes[storeType] );
 			retn=SPIFlashRead(readaddress, sizeof(BacklogDataTypes),buff);
 			if(retn != 0)
 			{
@@ -156,7 +171,7 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 			}
 			//if read of record is finish for a particular sector, then make availabilty entry in sector Table to 0.
 #ifdef DEBUG_BACKLOG
-			PRINTF("\n\rREADING record from Flash directly @Sector=%d, index=%d\n\r",DBManager.ReadSectorTablePtr[storeType],SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex);
+			PRINTF("\n\rREADING record from Flash directly @Sector=%d, index=%d\n\r",DBManager.ReadSectorTablePtr[storeType],SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex);
 #endif
 
 		}
@@ -165,8 +180,8 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 	}
 	DBManager.StoredRecordCnt[storeType]--;
 
-//	if(DBManager.StoredRecordCnt[storeType] < DBManager.LatestAvailabilityNumber[storeType])
-//		DBManager.LatestAvailabilityNumber[storeType]--;
+	if(DBManager.StoredRecordCnt[storeType] == 0 && DBManager.LatestAvailabilityNumber[storeType]>0)
+		DBManager.LatestAvailabilityNumber[storeType]=0;
 
 	FlashAccessInterlock=0;
 #ifdef DEBUG_BACKLOG
@@ -211,7 +226,7 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 	}
 
 	//check all boundary of buffer full, memory overflow, bad sector jump over and other housekeeping and management.
-	if(DBManager.EntryRecordbuffIndex[storeType] >= NOOF_RECORDINSECTOR)
+	if(DBManager.EntryRecordbuffIndex[storeType] >= DBManager.NoOfRecordInSector[storeType])
 	{
 		//WRITE to FLASH REQUIRED
 		//write to flash,first check boundary and management of sector table
@@ -223,13 +238,16 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 #ifdef DEBUG_BACKLOG
 			PRINTF("Storage OverFlow $$$$$$$$############ Decrement all sector availabiltyNumber\n\r");
 #endif
-			DBManager.LatestAvailabilityNumber[storeType]--;
+			if(DBManager.LatestAvailabilityNumber[storeType]>0)
+				DBManager.LatestAvailabilityNumber[storeType]--; //decrement latest availability
+
 
 			for(Sectindx=0;Sectindx<DBManager.SectorSize[storeType];Sectindx++)
 			{
 				if(SectorTable[Sectindx].AvailabilityNumber <= 0)//if it is bad sector skip, or Zero-i.e available
 					Sectindx++;
-				SectorTable[Sectindx].AvailabilityNumber--;
+				if(SectorTable[Sectindx].AvailabilityNumber>0)
+					SectorTable[Sectindx].AvailabilityNumber--;
 				if((SectorTable[Sectindx].AvailabilityNumber==0) && (SectorTable[Sectindx].ReadRecordIndex !=0))
 					SectorTable[Sectindx].ReadRecordIndex=0;
 			}
@@ -241,12 +259,12 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 		{
 			tempsectorcnt++;
 
-			if(SectorTable[DBManager.EntrySectorTablePtr[storeType]].AvailabilityNumber < 0)//if it is bad sector skip
+			if(SectorTable[DBManager.EntrySectorTablePtr[storeType]-DBManager.SectorStart[storeType]].AvailabilityNumber < 0)//if it is bad sector skip
 			{
 				IncrementSectorPtr( &DBManager.EntrySectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 				tempsectorcnt++;
 			}
-			if(SectorTable[DBManager.EntrySectorTablePtr[storeType]].AvailabilityNumber==0)//found sector to write
+			if(SectorTable[DBManager.EntrySectorTablePtr[storeType]-DBManager.SectorStart[storeType]].AvailabilityNumber==0)//found sector to write
 			{
 				break;
 			}
@@ -256,18 +274,16 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 
 			IncrementSectorPtr( &DBManager.EntrySectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 		}
-		DBManager.LatestAvailabilityNumber[storeType]++;
-		SectorTable[DBManager.EntrySectorTablePtr[storeType]].AvailabilityNumber=DBManager.LatestAvailabilityNumber[storeType];
-		SectorTable[DBManager.EntrySectorTablePtr[storeType]].SectorWriteCnt++;
+
 
 #ifdef DEBUG_BACKLOG
-		PRINTF("Write Sector @ %d\n\r",DBManager.EntrySectorTablePtr[storeType]);
+		PRINTF("Attempt to Write to Sector @ %d\n\r",DBManager.EntrySectorTablePtr[storeType]);
 #endif
 
 		//write the sector at ALTSectorTablePtr
 		if(ERROR == writeSPIFlashSector(DBManager.EntrySectorTablePtr[storeType], sizeof(BacklogDataTypes)*NOOF_EMGRECORDINSECTOR, EntrySectorBuffer))
 		{
-			SectorTable[DBManager.EntrySectorTablePtr[storeType]].AvailabilityNumber = -1; //record as bad sector
+			SectorTable[DBManager.EntrySectorTablePtr[storeType]-DBManager.SectorStart[storeType]].AvailabilityNumber = -1; //record as bad sector
 			DBManager.badsectorCnt[storeType]++;
 
 			FlashAccessInterlock=0;
@@ -277,24 +293,37 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 			return ERROR;
 
 		}
+
+		//write succesfull
+		DBManager.LatestAvailabilityNumber[storeType]++;
+		SectorTable[DBManager.EntrySectorTablePtr[storeType]-DBManager.SectorStart[storeType]].AvailabilityNumber=DBManager.LatestAvailabilityNumber[storeType];
+		SectorTable[DBManager.EntrySectorTablePtr[storeType]-DBManager.SectorStart[storeType]].SectorWriteCnt++;
+
+
 		DBManager.EntryRecordbuffIndex[storeType]=0;
-		SectorTable[DBManager.EntrySectorTablePtr[storeType]].ReadRecordIndex=NOOF_RECORDINSECTOR;
-		DBManager.LatestMaxSectorWriteCnt[storeType]=SectorTable[DBManager.EntrySectorTablePtr[storeType]].SectorWriteCnt;
+		SectorTable[DBManager.EntrySectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex=DBManager.NoOfRecordInSector[storeType];
+		DBManager.LatestMaxSectorWriteCnt[storeType]=SectorTable[DBManager.EntrySectorTablePtr[storeType]-DBManager.SectorStart[storeType]].SectorWriteCnt;
 		DBManager.ReadSectorTablePtr[storeType]=DBManager.EntrySectorTablePtr[storeType];//points read pointer
 		//DBManager.EntrySectorTablePtr[storeType]++;
 		IncrementSectorPtr( &DBManager.EntrySectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 
 #ifdef DEBUG_BACKLOG
+		PRINTF("Write Successfully on Sector \n\r");
 		PRINTF("LatestAvailabilityNumber - %d\n\r",DBManager.LatestAvailabilityNumber[storeType]);
 		PRINTF("LatestMaxSectorWriteCnt - %d\n\r",DBManager.LatestMaxSectorWriteCnt[storeType]);
 		PRINTF("ReadSectorTablePtr - %d\n\r",DBManager.ReadSectorTablePtr[storeType]);
 
 		PRINTF("\r\n");
+
+		debug_DisplaySectorTable(storeType);
+
 #endif
 
 	}
 	//boundary check done without error, then enter record on rambuffer
 	memcpy(&EntrySectorBuffer[DBManager.EntryRecordbuffIndex[storeType]], buff, sizeof(BacklogDataTypes));
+	if(DBManager.LatestAvailabilityNumber[storeType] == ((DBManager.SectorSize[storeType] - DBManager.badsectorCnt[storeType])))
+		DBManager.StoredRecordCnt[storeType]--;
 	DBManager.StoredRecordCnt[storeType]++;
 	DBManager.EntryRecordbuffIndex[storeType]++;
 
@@ -398,6 +427,19 @@ uint8_t initRecordManager(void)
 
 		DBManager.EntrySectorTablePtr[RECORDMANAGER]=RECORDMANAGE_SECTORSTART;//Not used
 		DBManager.ReadSectorTablePtr[RECORDMANAGER]=RECORDMANAGE_SECTORSTART;//Not used
+
+		DBManager.RecordSizeInBytes[EMGRECORD]=EMGRECORDSIZEBYTES;
+		DBManager.NoOfRecordInSector[EMGRECORD]=NOOF_EMGRECORDINSECTOR;
+
+		DBManager.RecordSizeInBytes[ALTRECORD]=ALTRECORDSIZEBYTES;
+		DBManager.NoOfRecordInSector[ALTRECORD]=NOOF_ALTRECORDINSECTOR;
+
+		DBManager.RecordSizeInBytes[LDRECORD]=LDRECORDSIZEBYTES;
+		DBManager.NoOfRecordInSector[LDRECORD]=NOOF_LDRECORDINSECTOR;
+
+		DBManager.RecordSizeInBytes[RECORDMANAGER]=sizeof(BacklogManagerTypes);
+		DBManager.NoOfRecordInSector[RECORDMANAGER]=1;
+
 		//for(int i=0;i<(EMGRECORD_SECTORSIZE*sizeof(SectorTableType));i++)
 		//	*(((uint8_t*)DBManager.EMGSectorTable) + i)=0;
 		for(int i=0;i<(EMGRECORD_SECTORSIZE);i++)
@@ -481,6 +523,12 @@ uint8_t writeSPIFlashSector(uint16_t sectorNum, uint16_t lenByte, void* buff)
 	uint16_t retn=0;
 	uint32_t addrs= sectorNum*FLASHSECTORSIZEBYTES;
 	uint8_t byteacessBuff[4096];
+
+#ifdef SIMULATE_BADSECTOR
+	if(sectorNum==BADSECTOR1 || sectorNum==BADSECTOR2)
+		return ERROR;
+#endif
+
 
 #ifdef DEBUG_BACKLOG
 //	uint8_t* byteacess=(uint8_t *)buff;
@@ -578,3 +626,70 @@ uint8_t SPIFlashWrite(uint32_t address, uint32_t byteLen, void *databuff)
 }
 //##################################################################################
 
+//utility function
+void debug_DisplaySectorTable(enum RecordTypes storeType)
+{
+	SectorTableType *SectorTable;
+	BacklogDataTypes *EntrySectorBuffer;
+
+	switch(storeType)
+	{
+		case EMGRecord: SectorTable=DBManager.EMGSectorTable;
+						EntrySectorBuffer =rambuffEMGRecord;
+
+						break;
+		case ALTRecord: SectorTable=DBManager.ALTSectorTable;
+						EntrySectorBuffer =rambuffALTRecord;
+						break;
+		case LDRecord:	SectorTable=DBManager.LDSectorTable;
+						EntrySectorBuffer =rambuffLDRecord;
+						break;
+		default		 :  return;
+						break;
+	}
+#ifdef DEBUG_BACKLOG
+	PRINTF("\n\rTable for Storage type : %d\n\r",storeType);
+	PRINTF("************************************************************\n\r");
+	PRINTF("Index \tSectorNo \tAvailability \tReadIndex \tWriteCnt\n\r");
+	for(int i=0;i<DBManager.SectorSize[storeType];i++)
+	{
+		PRINTF("   %d\t",i);//index
+		PRINTF("%d\t\t",i+DBManager.SectorStart[storeType]);//sectorNo
+		PRINTF("%d\t\t",SectorTable[i].AvailabilityNumber);//availability
+		PRINTF("%d\t\t",SectorTable[i].ReadRecordIndex);//read
+		PRINTF("%d\t\t",SectorTable[i].SectorWriteCnt);//sector writecnt
+		PRINTF("\n\r");
+	}
+	PRINTF("\n\r");
+	PRINTF("LatestAvailabilityNumber \t: %d \n\r",DBManager.LatestAvailabilityNumber[storeType]);
+	PRINTF("LatestMaxSectorWriteCnt  \t: %d \n\r",DBManager.LatestMaxSectorWriteCnt[storeType]);
+	PRINTF("StoredRecordCnt			   : %d records\n\r",DBManager.StoredRecordCnt[storeType]);
+	PRINTF("No of Record onRAMBuffer \t: %d records\n\r",DBManager.EntryRecordbuffIndex[storeType]);
+	PRINTF("Total Record			   : %d records\n\r",getTotalRecordSpace(storeType));
+	PRINTF("RecordSize in bytes		   : %d bytes\n\r",DBManager.RecordSizeInBytes[storeType]);
+	PRINTF("************************************************************\n\r\n\r");
+#endif
+}
+
+uint16_t getTotalRecordSpace(enum RecordTypes storeType)
+{
+	return DBManager.NoOfRecordInSector[storeType]*((DBManager.SectorSize[storeType]-DBManager.badsectorCnt[storeType])+1);
+}
+
+uint16_t getStoredNoOfRecord(enum RecordTypes storeType)
+{
+	return DBManager.StoredRecordCnt[storeType];
+}
+
+uint16_t getRemainingRecordSpace(enum RecordTypes storeType)
+{
+	return getTotalRecordSpace(storeType)-getStoredNoOfRecord(storeType);
+}
+uint16_t getRecordSize(enum RecordTypes storeType)
+{
+	return DBManager.RecordSizeInBytes[storeType];
+}
+uint16_t getNoOfRecordInSector(enum RecordTypes storeType)
+{
+	return DBManager.NoOfRecordInSector[storeType];
+}
