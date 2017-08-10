@@ -87,6 +87,10 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 	if(DBManager.EntryRecordbuffIndex[storeType]!=0)
 	{
 		memcpy( buff,&EntrySectorBuffer[DBManager.EntryRecordbuffIndex[storeType]-1],sizeof(BacklogDataTypes));
+
+#ifdef DEBUG_BACKLOG
+		PRINTF("\n\rREADING record from RAMwriteBuffer recordindex=%d\n\r",DBManager.EntryRecordbuffIndex[storeType]-1);
+#endif
 		DBManager.EntryRecordbuffIndex[storeType]--;
 	}
 	else
@@ -99,50 +103,76 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 		else
 		{
 			//read directly from Flash sector on where ReadSectorTablePtr Points
-			tempsectorcnt=0;
-			while(tempsectorcnt < DBManager.SectorSize[storeType])//traverse SectorTable[] by ReadSectorTablePtr backward
-			{
-				tempsectorcnt++;
 
-				if(SectorTable[DBManager.ReadSectorTablePtr[storeType]].AvailabilityNumber < 0)//if it is bad sector skip
+			if(SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex==0)
+			{ //search from flash else continue with readindex
+
+				//decrement the sector pointer first
+				DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
+				tempsectorcnt=0;
+				while(tempsectorcnt < DBManager.SectorSize[storeType])//traverse SectorTable[] by ReadSectorTablePtr backward
 				{
-					//move back
-					DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 					tempsectorcnt++;
+
+					if(SectorTable[DBManager.ReadSectorTablePtr[storeType]].AvailabilityNumber < 0)//if it is bad sector skip
+					{
+						//move back
+						DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
+						tempsectorcnt++;
+					}
+
+					if(SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex!=0) //data not empty
+							break;
+
+					//move back decrement
+					DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 				}
 
-				if(SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex!=0) //data not empty
-						break;
+				if((tempsectorcnt == DBManager.SectorSize[storeType])&&(SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex==0))
+				{	//all record send condition from flash
+					FlashAccessInterlock=0;
+					return EMPTY;
+				}
+				DBManager.LatestAvailabilityNumber[storeType]--;
+				SectorTable[DBManager.ReadSectorTablePtr[storeType]].AvailabilityNumber--;
+				SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex--;
 
-				//move back decrement
-				DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 			}
-			if((tempsectorcnt == DBManager.SectorSize[storeType])&&(SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex==0))
-			{	//all record send condition from flash
-				FlashAccessInterlock=0;
-				return EMPTY;
+			else
+			{
+				SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex--;
 			}
+
 
 			readaddress=( DBManager.ReadSectorTablePtr[storeType] *DBManager.FlashSectorSize); //get based address
 			readaddress= readaddress + (SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex * RECORDSIZEBYTES );
 			retn=SPIFlashRead(readaddress, sizeof(BacklogDataTypes),buff);
 			if(retn != 0)
 			{
+#ifdef DEBUG_BACKLOG
+			PRINTF("########**********Flash READ ERROR @address %u",readaddress);
+#endif
 				_Error_Handler(__FILE__, __LINE__);
 			}
 			//if read of record is finish for a particular sector, then make availabilty entry in sector Table to 0.
-
+#ifdef DEBUG_BACKLOG
+			PRINTF("\n\rREADING record from Flash directly @Sector=%d, index=%d\n\r",DBManager.ReadSectorTablePtr[storeType],SectorTable[DBManager.ReadSectorTablePtr[storeType]].ReadRecordIndex);
+#endif
 
 		}
-		DecrementSectorPtr( &DBManager.ReadSectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
-		SectorTable[DBManager.EntrySectorTablePtr[storeType]].ReadRecordIndex--;
+
+
 	}
 	DBManager.StoredRecordCnt[storeType]--;
 
-	if(DBManager.StoredRecordCnt[storeType] < DBManager.LatestAvailabilityNumber[storeType])
-		DBManager.LatestAvailabilityNumber[storeType]--;
+//	if(DBManager.StoredRecordCnt[storeType] < DBManager.LatestAvailabilityNumber[storeType])
+//		DBManager.LatestAvailabilityNumber[storeType]--;
 
 	FlashAccessInterlock=0;
+#ifdef DEBUG_BACKLOG
+	PRINTF("StoredRecordCnt:%d\n\r",DBManager.StoredRecordCnt[storeType]);
+	PRINTF("LatestAvailabilityNumber:%d\n\r",DBManager.LatestAvailabilityNumber[storeType]);
+#endif
 	return SUCCESS;
 }
 
@@ -250,7 +280,7 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 		DBManager.EntryRecordbuffIndex[storeType]=0;
 		SectorTable[DBManager.EntrySectorTablePtr[storeType]].ReadRecordIndex=NOOF_RECORDINSECTOR;
 		DBManager.LatestMaxSectorWriteCnt[storeType]=SectorTable[DBManager.EntrySectorTablePtr[storeType]].SectorWriteCnt;
-		DBManager.ReadSectorTablePtr[storeType]=DBManager.EntrySectorTablePtr[storeType];
+		DBManager.ReadSectorTablePtr[storeType]=DBManager.EntrySectorTablePtr[storeType];//points read pointer
 		//DBManager.EntrySectorTablePtr[storeType]++;
 		IncrementSectorPtr( &DBManager.EntrySectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 
@@ -258,7 +288,7 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 		PRINTF("LatestAvailabilityNumber - %d\n\r",DBManager.LatestAvailabilityNumber[storeType]);
 		PRINTF("LatestMaxSectorWriteCnt - %d\n\r",DBManager.LatestMaxSectorWriteCnt[storeType]);
 		PRINTF("ReadSectorTablePtr - %d\n\r",DBManager.ReadSectorTablePtr[storeType]);
-		PRINTF("StoredRecordCnt:%d\n\r",DBManager.StoredRecordCnt[storeType]);
+
 		PRINTF("\r\n");
 #endif
 
@@ -272,7 +302,8 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 
 #ifdef DEBUG_BACKLOG
 //	PRINTF("Record enter Successfully..StoredRecordCnt:%d\n\r",DBManager.StoredRecordCnt[storeType]);
-
+	PRINTF("StoredRecordCnt:%d\n\r",DBManager.StoredRecordCnt[storeType]);
+	PRINTF("EntryRecordbuffIndex:%d\n\r",DBManager.EntryRecordbuffIndex[storeType]);
 #endif
 	return SUCCESS;
 }

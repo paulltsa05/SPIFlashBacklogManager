@@ -114,10 +114,16 @@ int main(void)
 	PRINTF("Flash initialize Done* \n\r");
 
   /* USER CODE END 2 */
-	for(p=0;p<1500;p++)
+	for(p=0;p<150;p++)
 	{
 		EnterRecord(ALTRecord,&Data);
-	    if(p%2==0)
+	    //if(p%2==0)
+	    //	ReadRecord(ALTRecord,&Data);
+	}
+	for(p=0;p<150;p++)
+	{
+		//EnterRecord(ALTRecord,&Data);
+	    //if(p%2==0)
 	    	ReadRecord(ALTRecord,&Data);
 	}
   /* Infinite loop */
