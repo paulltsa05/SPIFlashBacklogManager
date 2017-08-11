@@ -114,7 +114,7 @@ int main(void)
 	PRINTF("Flash initialize Done* \n\r");
 
   /* USER CODE END 2 */
-	for(p=0;p<579;p++)
+	for(p=0;p<2597;p++)
 	{
 		if(ERROR==EnterRecord(ALTRecord,&Data))
 			p--;
@@ -122,14 +122,14 @@ int main(void)
 //	    	ReadRecord(ALTRecord,&Data);
 	}
 	debug_DisplaySectorTable(ALTRecord);
-//	for(p=0;p<(488);p++)
-//	{
-//		//EnterRecord(ALTRecord,&Data);
-//	    //if(p%2==0)
-//	    	ReadRecord(ALTRecord,&Data);
-//	}
-//
-//	debug_DisplaySectorTable(ALTRecord);
+	for(p=0;p<(536);p++)
+	{
+		//EnterRecord(ALTRecord,&Data);
+	    //if(p%2==0)
+	    	ReadRecord(ALTRecord,&Data);
+	}
+
+	debug_DisplaySectorTable(ALTRecord);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
@@ -315,6 +315,8 @@ void vcom_Send( char *format, ... )//for serial debug
 
   va_end(args);
 }
+
+
 /* USER CODE END 4 */
 
 /**

@@ -32,7 +32,7 @@
 struct spi_flash *spiflashHandler;
 uint8_t retn;
 
-static uint8_t FlashAccessInterlock=0;
+static uint8_t FlashAccessInterlock=0,memoryoverrun=0;
 
 
 BacklogManagerTypes DBManager;
@@ -180,6 +180,8 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 	}
 	DBManager.StoredRecordCnt[storeType]--;
 
+	if(DBManager.StoredRecordCnt[storeType] < ((DBManager.SectorSize[storeType] -DBManager.badsectorCnt[storeType]) *DBManager.NoOfRecordInSector[storeType]))
+		memoryoverrun=0;
 	if(DBManager.StoredRecordCnt[storeType] == 0 && DBManager.LatestAvailabilityNumber[storeType]>0)
 		DBManager.LatestAvailabilityNumber[storeType]=0;
 
@@ -240,7 +242,7 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 #endif
 			if(DBManager.LatestAvailabilityNumber[storeType]>0)
 				DBManager.LatestAvailabilityNumber[storeType]--; //decrement latest availability
-
+			memoryoverrun=1;
 
 			for(Sectindx=0;Sectindx<DBManager.SectorSize[storeType];Sectindx++)
 			{
@@ -307,6 +309,11 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 		//DBManager.EntrySectorTablePtr[storeType]++;
 		IncrementSectorPtr( &DBManager.EntrySectorTablePtr[storeType], DBManager.SectorStart[storeType], DBManager.SectorSize[storeType]);
 
+		//on overflow/memory overrun decrement the StoredRecordCnt
+		if(memoryoverrun==1)
+			DBManager.StoredRecordCnt[storeType]=DBManager.StoredRecordCnt[storeType]-DBManager.NoOfRecordInSector[storeType];
+
+
 #ifdef DEBUG_BACKLOG
 		PRINTF("Write Successfully on Sector \n\r");
 		PRINTF("LatestAvailabilityNumber - %d\n\r",DBManager.LatestAvailabilityNumber[storeType]);
@@ -322,8 +329,7 @@ uint8_t EnterRecord(enum RecordTypes storeType, void *buff)
 	}
 	//boundary check done without error, then enter record on rambuffer
 	memcpy(&EntrySectorBuffer[DBManager.EntryRecordbuffIndex[storeType]], buff, sizeof(BacklogDataTypes));
-	if(DBManager.LatestAvailabilityNumber[storeType] == ((DBManager.SectorSize[storeType] - DBManager.badsectorCnt[storeType])))
-		DBManager.StoredRecordCnt[storeType]--;
+
 	DBManager.StoredRecordCnt[storeType]++;
 	DBManager.EntryRecordbuffIndex[storeType]++;
 
