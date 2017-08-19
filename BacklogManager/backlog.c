@@ -356,12 +356,19 @@ uint8_t initRecordManager(void)
 	//first write default value
 	//check first time initialization of Record Manager
 	bytebybyte=(uint8_t*)&DBManager;
-	retn=SPIFlashRead(RECORDMANAGE_SECTORSTART*FLASHSECTORSIZEBYTES, sizeof(BacklogManagerTypes),bytebybyte);
+	retn=SPIFlashRead(RECORDMANAGE_SECTORSTART*FLASHSECTORSIZEBYTES, FLASHSECTORSIZEBYTES,bytebybyte);
+	retn=SPIFlashRead((RECORDMANAGE_SECTORSTART+1)*FLASHSECTORSIZEBYTES, sizeof(BacklogManagerTypes)-FLASHSECTORSIZEBYTES,bytebybyte+FLASHSECTORSIZEBYTES);
+//	retn=SPIFlashRead(RECORDMANAGE_SECTORSTART*FLASHSECTORSIZEBYTES, FLASHSECTORSIZEBYTES,bytebybyte);
+//	retn=SPIFlashRead((RECORDMANAGE_SECTORSTART+1)*FLASHSECTORSIZEBYTES, sizeof(BacklogManagerTypes)-FLASHSECTORSIZEBYTES,bytebybyte+FLASHSECTORSIZEBYTES);
 
 #ifdef DEBUG_BACKLOG
-//	PRINTF("\n\rConfiguration Read \n\r");
-//	PRINTF("sector start:%d\n\r",RECORDMANAGE_SECTORSTART);
-//	PRINTF("Length:%d\n\r",sizeof(BacklogManagerTypes));
+	PRINTF("\n\rBacklogManagerTypes address:%x ",&DBManager);
+	PRINTF("\n\rBacklogManagerTypes mtag address:%x,%x",&DBManager.mtag,DBManager.mtag);
+	PRINTF("\n\rBacklogManagerTypes checksum address:%x,%d",&DBManager.checksum,DBManager.checksum);
+
+	PRINTF("\n\rConfiguration Read \n\r");
+	PRINTF("sector start:%d\n\r",RECORDMANAGE_SECTORSTART);
+	PRINTF("Length:%d\n\r",sizeof(BacklogManagerTypes));
 //
 //	for(int i=0;i<sizeof(BacklogManagerTypes);i++)
 //	{
@@ -384,8 +391,8 @@ uint8_t initRecordManager(void)
 	{
 #ifdef DEBUG_BACKLOG
 		PRINTF("\n\r\n\r Record Manager ChecksumError \n\r");
-		PRINTF("Received checksum  : %x \n\r", DBManager.checksum );
-		PRINTF("calculated checksum : %x \n\r", chcksum );
+		PRINTF("Received checksum  : %u \n\r", DBManager.checksum );
+		PRINTF("calculated checksum : %u \n\r", chcksum );
 #endif
 		if(DBManager.mtag == 0X5A5A5A5A)//check for first format
 		{
@@ -483,9 +490,11 @@ uint8_t initRecordManager(void)
 		DBManager.checksum=chcksum;//store the new checksum
 #ifdef DEBUG_BACKLOG
 		PRINTF("\n\r\n\r********INITIALIZING AND FORMATING BACKLOG STORAGE*********** \n\r");
-		PRINTF("\n\rCalculated checksum : %x \n\r", chcksum );
+		PRINTF("\n\rCalculated checksum : %u \n\r", chcksum );
+		PRINTF("\n\rCalculated sector to write : %u \n\r",DBManager.SectorStart[RECORDMANAGER]);
 #endif
 		retn=0;
+		bytebybyte=(uint8_t*)&DBManager;
 		if(sizeOfmanager <= FLASHSECTORSIZEBYTES)
 		{
 			retn=writeSPIFlashSector(DBManager.SectorStart[RECORDMANAGER], sizeOfmanager,bytebybyte);
@@ -493,7 +502,8 @@ uint8_t initRecordManager(void)
 		else if(sizeOfmanager <= FLASHSECTORSIZEBYTES*2)//it support manager data size more than 1 sector or >4096 bytes
 		{
 			retn=writeSPIFlashSector(DBManager.SectorStart[RECORDMANAGER],FLASHSECTORSIZEBYTES,bytebybyte);
-			retn|=writeSPIFlashSector((DBManager.SectorStart[RECORDMANAGER]+1),sizeOfmanager-FLASHSECTORSIZEBYTES,bytebybyte+FLASHSECTORSIZEBYTES);
+			//retn|=writeSPIFlashSector((DBManager.SectorStart[RECORDMANAGER]+1),sizeOfmanager-FLASHSECTORSIZEBYTES,bytebybyte+FLASHSECTORSIZEBYTES);
+			retn|=writeSPIFlashSector((DBManager.SectorStart[RECORDMANAGER]+1),FLASHSECTORSIZEBYTES,bytebybyte+FLASHSECTORSIZEBYTES);
 		}
 		else ////it support manager data size more than 2 sector
 		{
@@ -501,6 +511,24 @@ uint8_t initRecordManager(void)
 			retn|=writeSPIFlashSector((DBManager.SectorStart[RECORDMANAGER]+1),FLASHSECTORSIZEBYTES, bytebybyte+FLASHSECTORSIZEBYTES);
 			retn|=writeSPIFlashSector((DBManager.SectorStart[RECORDMANAGER]+2),sizeOfmanager - FLASHSECTORSIZEBYTES, bytebybyte+(FLASHSECTORSIZEBYTES*2));
 		}
+
+			//check first time initialization of Record Manager
+			bytebybyte=(uint8_t*)&DBManager;
+			retn=SPIFlashRead(DBManager.SectorStart[RECORDMANAGER]*FLASHSECTORSIZEBYTES, FLASHSECTORSIZEBYTES,bytebybyte);
+			retn=SPIFlashRead((DBManager.SectorStart[RECORDMANAGER]+1)*FLASHSECTORSIZEBYTES, sizeof(BacklogManagerTypes)-FLASHSECTORSIZEBYTES,bytebybyte+FLASHSECTORSIZEBYTES);
+		//	retn=SPIFlashRead(RECORDMANAGE_SECTORSTART*FLASHSECTORSIZEBYTES, FLASHSECTORSIZEBYTES,bytebybyte);
+		//	retn=SPIFlashRead((RECORDMANAGE_SECTORSTART+1)*FLASHSECTORSIZEBYTES, sizeof(BacklogManagerTypes)-FLASHSECTORSIZEBYTES,bytebybyte+FLASHSECTORSIZEBYTES);
+
+		#ifdef DEBUG_BACKLOG
+			PRINTF("\n\rBacklogManagerTypes address:%x",&DBManager);
+			PRINTF("\n\rBacklogManagerTypes mtag address:%x,%x",&DBManager.mtag,DBManager.mtag);
+			PRINTF("\n\rBacklogManagerTypes checksum address:%x,%d",&DBManager.checksum,DBManager.checksum);
+
+			PRINTF("\n\rConfiguration Read \n\r");
+			PRINTF("sector start:%d\n\r",RECORDMANAGE_SECTORSTART);
+			PRINTF("Length:%d\n\r",sizeof(BacklogManagerTypes));
+
+		#endif
 
 		if(retn != SUCCESS)
 		{	//unexceptional error
@@ -528,7 +556,7 @@ uint8_t writeSPIFlashSector(uint16_t sectorNum, uint16_t lenByte, void* buff)
 	uint8_t retrycnt=FLASHWRITE_RETRY; //Handle multiple retry of Sector Write
 	uint16_t retn=0;
 	uint32_t addrs= sectorNum*FLASHSECTORSIZEBYTES;
-	uint8_t byteacessBuff[4096];
+	//uint8_t byteacessBuff[4096];
 
 #ifdef SIMULATE_BADSECTOR
 	if(sectorNum==BADSECTOR1 || sectorNum==BADSECTOR2)
@@ -556,14 +584,19 @@ uint8_t writeSPIFlashSector(uint16_t sectorNum, uint16_t lenByte, void* buff)
 		retn=SPIFlashErase(addrs,4096);
 		//to stimulate badsector change buff to corrupt the data if sector at specific sector no.
 		//HAL_Delay(5);
-		retn|=SPIFlashWrite(addrs,lenByte,byteacessBuff);
+		retn|=SPIFlashWrite(addrs,lenByte,(uint8_t *)buff);
 		//to stimulate badsector change back buff
 		//HAL_Delay(5);
 		retn|=SPIFlashRead(addrs,lenByte,tempSectorBuff);
-		if(retn==0 && memcmp(byteacessBuff,tempSectorBuff,lenByte)==0)
+//		PRINTF("\n\r");
+//		for(int i=0;i<4;i++)
+//			PRINTF("%x,",tempSectorBuff[i]);
+//		PRINTF("\n\r");
+
+		if(retn==0 && memcmp((uint8_t *)buff,tempSectorBuff,lenByte)==0)
 		{
 #ifdef DEBUG_BACKLOG
-			PRINTF("Success Write\n\r");
+			PRINTF("Success Write @%d, len=%d\n\r",sectorNum,lenByte);
 #endif
 
 			return SUCCESS;
@@ -572,7 +605,7 @@ uint8_t writeSPIFlashSector(uint16_t sectorNum, uint16_t lenByte, void* buff)
 	}
 
 #ifdef DEBUG_BACKLOG
-	PRINTF("Succes ERROR\n\r");
+	PRINTF("Sector Write ERROR\n\r");
 #endif
 	return ERROR;//write fail on a sector
 }

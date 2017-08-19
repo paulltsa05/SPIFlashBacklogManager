@@ -110,11 +110,9 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
   initRecordManager();
-
+  debug_DisplaySectorTable(ALTRecord);
 	PRINTF("Flash initialize Done* \n\r");
-
-  /* USER CODE END 2 */
-	for(p=0;p<2597;p++)
+	for(p=0;p<13;p++)
 	{
 		if(ERROR==EnterRecord(ALTRecord,&Data))
 			p--;
@@ -122,7 +120,7 @@ int main(void)
 //	    	ReadRecord(ALTRecord,&Data);
 	}
 	debug_DisplaySectorTable(ALTRecord);
-	for(p=0;p<(536);p++)
+	for(p=0;p<(13);p++)
 	{
 		//EnterRecord(ALTRecord,&Data);
 	    //if(p%2==0)
@@ -130,6 +128,8 @@ int main(void)
 	}
 
 	debug_DisplaySectorTable(ALTRecord);
+  /* USER CODE END 2 */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
