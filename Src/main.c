@@ -77,7 +77,7 @@ static char buff[BUFSIZE+16];//for serial debug
 uint8_t SectorBuffwrite[4096];
 uint8_t SectorBuffread[4096];
 
-BacklogDataTypes Data;
+ALT_BacklogDataTypes Data;
 /* USER CODE END 0 */
 
 int main(void)
@@ -109,25 +109,41 @@ int main(void)
   MX_USART2_UART_Init();
 
   /* USER CODE BEGIN 2 */
+  //ClearTagRecord();
   initRecordManager();
-  debug_DisplaySectorTable(ALTRecord);
+
+  ClearTagRecord();
+  initRecordManager();
+  debug_DisplaySectorTable(ALTRECORD);
+  debug_DisplaySectorTable(EMGRECORD);
+  debug_DisplaySectorTable(OTARecord);
+//  debug_DisplaySectorTable(LDRecord);
 	PRINTF("Flash initialize Done* \n\r");
-	for(p=0;p<13;p++)
+	for(p=0;p<70;p++)
 	{
-		if(ERROR==EnterRecord(ALTRecord,&Data))
+		Data.recordNum=p;
+		if(ERROR==EnterRecord(OTARECORD,&Data))
 			p--;
 //	    if(p%3==0)
 //	    	ReadRecord(ALTRecord,&Data);
 	}
-	debug_DisplaySectorTable(ALTRecord);
-	for(p=0;p<(13);p++)
+	debug_DisplaySectorTable(OTARECORD);
+//	PRINTF("\n\r\n\r Enter to stanby mode save all record \n\r");
+//	SaveAllRecord();//enter low power mode
+//
+//	PRINTF("\n\r\n\r Restart with init \n\r");
+//	initRecordManager();
+//	debug_DisplaySectorTable(ALTRecord);
+
+	for(p=0;p<(70);p++)
 	{
 		//EnterRecord(ALTRecord,&Data);
 	    //if(p%2==0)
-	    	ReadRecord(ALTRecord,&Data);
+	    	ReadRecord(OTARECORD,&Data);
+	    	PRINTF("\n\rData Record Read Number : %u",Data.recordNum);
 	}
 
-	debug_DisplaySectorTable(ALTRecord);
+	debug_DisplaySectorTable(OTARECORD);
   /* USER CODE END 2 */
 
   /* Infinite loop */
