@@ -128,12 +128,12 @@ int main(void)
 //	    	ReadRecord(ALTRecord,&Data);
 	}
 	debug_DisplaySectorTable(OTARECORD);
-//	PRINTF("\n\r\n\r Enter to stanby mode save all record \n\r");
-//	SaveAllRecord();//enter low power mode
-//
-//	PRINTF("\n\r\n\r Restart with init \n\r");
-//	initRecordManager();
-//	debug_DisplaySectorTable(ALTRecord);
+	PRINTF("\n\r\n\r Enter to stanby mode save all record \n\r");
+	SaveAllRecord();//enter low power mode
+
+	PRINTF("\n\r\n\r Restart with init \n\r");
+	initRecordManager();
+	debug_DisplaySectorTable(OTARecord);
 
 	for(p=0;p<(70);p++)
 	{

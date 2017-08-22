@@ -188,10 +188,9 @@ uint8_t ReadRecord(enum RecordTypes storeType, void *buff)
 
 			readaddress=( DBManager.ReadSectorTablePtr[storeType] *DBManager.FlashSectorSize); //get based address
 			readaddress= readaddress + ((SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex) * (DBManager.RecordSizeInBytes[storeType]) );
-			PRINTF("\n\r Read Flash @ %u Actualdatasize=%d ", readaddress,DBManager.RecordSizeInBytes[storeType]);
 			retn=SPIFlashRead(readaddress, (uint32_t)DBManager.RecordSizeInBytes[storeType],buffptr);
 
-			PRINTF("\n\r Read Flash %d : %d , %u, %d",DBManager.ReadSectorTablePtr[storeType],SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex,readaddress, ((buffptr[1]<<8)+buffptr[0]));
+//			PRINTF("\n\r Read Flash %d : %d , %u, %d",DBManager.ReadSectorTablePtr[storeType],SectorTable[DBManager.ReadSectorTablePtr[storeType]-DBManager.SectorStart[storeType]].ReadRecordIndex,readaddress, ((buffptr[1]<<8)+buffptr[0]));
 			if(retn != 0)
 			{
 #ifdef DEBUG_BACKLOG
@@ -537,8 +536,6 @@ uint8_t initRecordManager(void)
 			DBManager.badsectorCnt[i]=0;
 		}
 
-
-
 		DBManager.EntrySectorTablePtr[EMGRECORD]=EMGRECORD_SECTORSTART;
 		DBManager.EntrySectorTablePtr[OTARECORD]=OTARECORD_SECTORSTART;
 		DBManager.EntrySectorTablePtr[ALTRECORD]=ALTRECORD_SECTORSTART;
@@ -647,24 +644,24 @@ uint8_t initRecordManager(void)
 					switch(i)
 					{
 						case EMGRecord:
-							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i], ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffEMGRecord);
+							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i]*FLASHSECTORSIZEBYTES, ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffEMGRecord);
 							DBManager.EMGSectorTable[DBManager.EntrySectorTablePtr[i]-DBManager.SectorStart[i]].AvailabilityNumber=0;
 							break;
 						case OTARecord:
-							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i], ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffOTARecord);
+							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i]*FLASHSECTORSIZEBYTES, ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffOTARecord);
 							DBManager.OTASectorTable[DBManager.EntrySectorTablePtr[i]-DBManager.SectorStart[i]].AvailabilityNumber=0;
 							break;
 						case ALTRecord:
-							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i], ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffALTRecord);
+							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i]*FLASHSECTORSIZEBYTES, ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffALTRecord);
 							DBManager.ALTSectorTable[DBManager.EntrySectorTablePtr[i]-DBManager.SectorStart[i]].AvailabilityNumber=0;
 							break;
 						case LDRecord:
-							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i], ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffLDRecord);
+							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i]*FLASHSECTORSIZEBYTES, ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffLDRecord);
 							DBManager.LDSectorTable[DBManager.EntrySectorTablePtr[i]-DBManager.SectorStart[i]].AvailabilityNumber=0;
 							break;
 						case CANRecord:
-							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i], ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffCANRecord);
-							DBManager.LDSectorTable[DBManager.EntrySectorTablePtr[i]-DBManager.SectorStart[i]].AvailabilityNumber=0;
+							retn=SPIFlashRead(DBManager.EntrySectorTablePtr[i]*FLASHSECTORSIZEBYTES, ((DBManager.RecordSizeInBytes[i])*DBManager.EntryRecordbuffIndex[i]),rambuffCANRecord);
+							DBManager.CANSectorTable[DBManager.EntrySectorTablePtr[i]-DBManager.SectorStart[i]].AvailabilityNumber=0;
 							break;
 						default		 :  FlashAccessInterlock=0;
 										return ERROR;
