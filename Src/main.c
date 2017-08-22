@@ -117,33 +117,33 @@ int main(void)
   debug_DisplaySectorTable(ALTRECORD);
   debug_DisplaySectorTable(EMGRECORD);
   debug_DisplaySectorTable(OTARecord);
-//  debug_DisplaySectorTable(LDRecord);
+  debug_DisplaySectorTable(CANRecord);
 	PRINTF("Flash initialize Done* \n\r");
 	for(p=0;p<70;p++)
 	{
 		Data.recordNum=p;
-		if(ERROR==EnterRecord(OTARECORD,&Data))
+		if(ERROR==EnterRecord(CANRECORD,&Data))
 			p--;
-//	    if(p%3==0)
-//	    	ReadRecord(ALTRecord,&Data);
+	    if(p%4==0)
+	    	ReadRecord(CANRecord,&Data);
 	}
-	debug_DisplaySectorTable(OTARECORD);
+	debug_DisplaySectorTable(CANRECORD);
 	PRINTF("\n\r\n\r Enter to stanby mode save all record \n\r");
 	SaveAllRecord();//enter low power mode
 
 	PRINTF("\n\r\n\r Restart with init \n\r");
 	initRecordManager();
-	debug_DisplaySectorTable(OTARecord);
+	debug_DisplaySectorTable(CANRecord);
 
 	for(p=0;p<(70);p++)
 	{
 		//EnterRecord(ALTRecord,&Data);
 	    //if(p%2==0)
-	    	ReadRecord(OTARECORD,&Data);
+	    	ReadRecord(CANRECORD,&Data);
 	    	PRINTF("\n\rData Record Read Number : %u",Data.recordNum);
 	}
 
-	debug_DisplaySectorTable(OTARECORD);
+	debug_DisplaySectorTable(CANRECORD);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -294,7 +294,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI2_CS_PIN_GPIO_Port, SPI2_CS_PIN_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(SPI2_CS_PIN_GPIO_Port, SPI2_CS_PIN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -313,7 +313,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = SPI2_CS_PIN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(SPI2_CS_PIN_GPIO_Port, &GPIO_InitStruct);
 
 }
