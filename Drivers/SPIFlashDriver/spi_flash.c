@@ -324,6 +324,18 @@ err_read_id:
 	return NULL;
 }
 
+struct spi_slave *spi_setup_slave(void)
+{
+	struct spi_slave *slave = malloc(sizeof(*slave));
+
+	if (!slave) {
+		return NULL;
+	}
+
+	memset(slave, 0, sizeof(*slave));
+
+	return slave;
+}
 
 //PORTING LAYER
 int spi_xfer(struct spi_slave *slave, const void *dout,
@@ -338,15 +350,4 @@ int spi_xfer(struct spi_slave *slave, const void *dout,
    HAL_GPIO_WritePin(SPI2_CS_PIN_GPIO_Port, SPI2_CS_PIN_Pin, GPIO_PIN_SET);
    return ret;//HAL_SPI_TransmitReceive(&hspi2,(uint8_t *)dout,(uint8_t *)din,bytesout,50);;
 }
-struct spi_slave *spi_setup_slave(void)
-{
-	struct spi_slave *slave = malloc(sizeof(*slave));
 
-	if (!slave) {
-		return NULL;
-	}
-
-	memset(slave, 0, sizeof(*slave));
-
-	return slave;
-}

@@ -872,6 +872,15 @@ uint8_t SPIFlashInit(void)
 	spiflashHandler->spi =spi_setup_slave();
 
 	spiflashHandler =spi_flash_probe();
+
+#ifdef DEBUG_BACKLOG
+	PRINTF("\n\r\n\r*********** SPI Flash probe done SUCCESS ******\n\r");
+	PRINTF("Make \t: %s\n\r",spiflashHandler->name);
+	PRINTF("Size \t: %u\n\r",spiflashHandler->size);
+	PRINTF("SectorSize\t: %d\n\r",spiflashHandler->sector_size);
+	PRINTF("TotalSector\t: %d\n\r",((spiflashHandler->size)/(spiflashHandler->sector_size)));
+
+#endif
 	return SUCCESS;
 }
 uint8_t SPIFlashRead(uint32_t address, uint32_t byteLen, void *databuff)
